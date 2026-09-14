@@ -1,0 +1,45 @@
+name: Scheduled L2 Job Scraper & Mailer
+
+on:
+  schedule:
+    # 10:00 AM IST daily (04:30 UTC)
+    - cron: '30 4 * * *'
+    # 2:00 PM IST daily (08:30 UTC)
+    - cron: '30 8 * * *'
+    # 6:30 PM IST daily (13:00 UTC)
+    - cron: '0 13 * * *'
+  # Allows on-demand manual trigger from the GitHub web console
+  workflow_dispatch:
+
+jobs:
+  scrape-filter-and-email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Run Job Scraper & Dispatch Email
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: node scraper.js
+
+      - name: Archive Excel Report as Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Targeted_Job_List
+          path: Formatted_L2_Jobs_Multi_City.xlsx
+          retention-days: 7
