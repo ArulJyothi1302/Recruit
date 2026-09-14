@@ -8,6 +8,8 @@ on:
     - cron: '30 8 * * *'
     # 6:30 PM IST daily (13:00 UTC)
     - cron: '0 13 * * *'
+    #10:00 PM IST daily (04:30 UTC)
+    - cron: '30 16 * * *'
   # Allows on-demand manual trigger from the GitHub web console
   workflow_dispatch:
 

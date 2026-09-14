@@ -27,7 +27,7 @@ async function aggregateAndFormatJobs() {
     const targetLocations = ["Chennai", "Bengaluru", "Hyderabad", "Trichy", "Coimbatore"];
     const past21Days = 21; 
 
-    const store = await client.keyValueStores().getOrCreate('l2-job-scraper-state');
+    const store = await client.keyValueStores().getOrCreate('l2-job-scraper-state-v2');
     const kvClient = client.keyValueStore(store.id);
     const seenRecord = await kvClient.getRecord('SEEN_JOB_HASHES');
     const seenHashes = new Set(seenRecord ? seenRecord.value : []);
