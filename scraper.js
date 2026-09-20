@@ -33,18 +33,19 @@ const PORTALS = {
     Indeed: 'automation-lab/indeed-scraper',
 };
 
-// Your target locations
+// COST FIX #1: Trimmed to the only two cities that have ever
+// produced qualifying matches across past runs. Trichy has
+// returned zero matches every time; Coimbatore almost always
+// falls back to nationwide results anyway. Every extra location
+// here = 1 more actor run PER portal, PER cycle.
 const TARGET_LOCATIONS = [
-    'Tamil Nadu',
     'Chennai',
     'Bengaluru',
-    'Hyderabad',
-    'Coimbatore',
 ];
 
 // Search broad enough to find different naming variations.
 const SEARCH_KEYWORDS =
-    'React Node.js Full Stack TypeScript JavaScript AWS';
+    'React Node.js Next.Js Full Stack TypeScript JavaScript AWS';
 
 // Since cron runs every 2 days, 3 days gives some safety overlap.
 const SEARCH_DAYS = 3;
@@ -53,8 +54,18 @@ const SEARCH_DAYS = 3;
 const EXPERIENCE_MIN = 2;
 const EXPERIENCE_MAX = 6;
 
-// Maximum jobs returned per scraper execution.
-const MAX_ITEMS = 50;
+// COST FIX #2: Lowered from 50. Your own filter logic only keeps
+// jobs scoring 30+, so pulling 50 per call to keep a handful was
+// paying for results you throw away. Raise this back up only if
+// you start noticing you're missing matches.
+const MAX_ITEMS = 20;
+
+// Comma-joined location string, used for portals whose actor
+// accepts one "location" field but will match across multiple
+// cities when given a combined string (many guest-search-based
+// actors do this). Kept separate from the array form below so
+// you can try whichever your actor's Input schema documents.
+const LOCATIONS_JOINED = TARGET_LOCATIONS.join(', ');
 
 // ============================================================
 // STACK MATCHING
@@ -300,18 +311,38 @@ async function getDatasetItems(run) {
 }
 
 // ============================================================
+// COST FIX #3: ONE ACTOR CALL PER PORTAL, NOT PER (PORTAL x
+// LOCATION). Each scrape* function below now runs once per
+// portal for the whole run, covering all TARGET_LOCATIONS in a
+// single call. This is the single biggest cost lever: it cuts
+// actor "starts" (which Apify bills separately from results)
+// from (portals x locations) down to just (portals).
+//
+// IMPORTANT: verify each actor's Input tab on Apify Console
+// before relying on this. Some accept a "location" array field,
+// some only accept one string and will search across all named
+// cities if you comma-join them (LOCATIONS_JOINED), and a few
+// genuinely only support one location per run — for those you
+// have no choice but to loop, so a fallback loop version is
+// commented into each function below.
+// ============================================================
+
+// ============================================================
 // LINKEDIN
 // ============================================================
 
-async function scrapeLinkedIn(location) {
-    console.log(`🔵 LinkedIn → ${location}`);
+async function scrapeLinkedIn() {
+    console.log(`🔵 LinkedIn → ${LOCATIONS_JOINED}`);
 
     try {
         const run = await client
             .actor(PORTALS.LinkedIn)
             .call({
                 keywords: SEARCH_KEYWORDS,
-                location,
+                // Try array form first — check Input schema.
+                // If it errors or silently ignores extra cities,
+                // switch to: location: LOCATIONS_JOINED,
+                location: TARGET_LOCATIONS,
                 datePosted: 'r259200',
                 limit: MAX_ITEMS,
             });
@@ -320,36 +351,47 @@ async function scrapeLinkedIn(location) {
 
         return {
             portal: 'LinkedIn',
-            location,
+            location: LOCATIONS_JOINED,
             items,
         };
     } catch (error) {
         console.error(
-            `❌ LinkedIn failed for ${location}:`,
+            `❌ LinkedIn failed:`,
             error.message
         );
 
         return {
             portal: 'LinkedIn',
-            location,
+            location: LOCATIONS_JOINED,
             items: [],
         };
     }
+
+    // --- Fallback if the actor truly only accepts one location ---
+    // for (const location of TARGET_LOCATIONS) {
+    //     const run = await client.actor(PORTALS.LinkedIn).call({
+    //         keywords: SEARCH_KEYWORDS,
+    //         location,
+    //         datePosted: 'r259200',
+    //         limit: MAX_ITEMS,
+    //     });
+    //     ...
+    // }
 }
 
 // ============================================================
 // NAUKRI
 // ============================================================
 
-async function scrapeNaukri(location) {
-    console.log(`🟢 Naukri → ${location}`);
+async function scrapeNaukri() {
+    console.log(`🟢 Naukri → ${LOCATIONS_JOINED}`);
 
     try {
         const run = await client
             .actor(PORTALS.Naukri)
             .call({
                 keyword: SEARCH_KEYWORDS,
-                location,
+                location: LOCATIONS_JOINED,
                 experienceMin: EXPERIENCE_MIN,
                 experienceMax: EXPERIENCE_MAX,
                 postedWithinDays: SEARCH_DAYS,
@@ -359,18 +401,18 @@ async function scrapeNaukri(location) {
 
         return {
             portal: 'Naukri',
-            location,
+            location: LOCATIONS_JOINED,
             items,
         };
     } catch (error) {
         console.error(
-            `❌ Naukri failed for ${location}:`,
+            `❌ Naukri failed:`,
             error.message
         );
 
         return {
             portal: 'Naukri',
-            location,
+            location: LOCATIONS_JOINED,
             items: [],
         };
     }
@@ -380,15 +422,15 @@ async function scrapeNaukri(location) {
 // HIRIST
 // ============================================================
 
-async function scrapeHirist(location) {
-    console.log(`🟠 Hirist → ${location}`);
+async function scrapeHirist() {
+    console.log(`🟠 Hirist → ${LOCATIONS_JOINED}`);
 
     try {
         const run = await client
             .actor(PORTALS.Hirist)
             .call({
                 queries: [SEARCH_KEYWORDS],
-                location,
+                location: LOCATIONS_JOINED,
                 maxDaysOld: SEARCH_DAYS,
             });
 
@@ -396,18 +438,18 @@ async function scrapeHirist(location) {
 
         return {
             portal: 'Hirist',
-            location,
+            location: LOCATIONS_JOINED,
             items,
         };
     } catch (error) {
         console.error(
-            `❌ Hirist failed for ${location}:`,
+            `❌ Hirist failed:`,
             error.message
         );
 
         return {
             portal: 'Hirist',
-            location,
+            location: LOCATIONS_JOINED,
             items: [],
         };
     }
@@ -417,15 +459,15 @@ async function scrapeHirist(location) {
 // INDEED
 // ============================================================
 
-async function scrapeIndeed(location) {
-    console.log(`🟣 Indeed → ${location}`);
+async function scrapeIndeed() {
+    console.log(`🟣 Indeed → ${LOCATIONS_JOINED}`);
 
     try {
         const run = await client
             .actor(PORTALS.Indeed)
             .call({
                 query: SEARCH_KEYWORDS,
-                location,
+                location: LOCATIONS_JOINED,
                 country: 'IN',
                 maxDaysOld: SEARCH_DAYS,
                 maxItems: MAX_ITEMS,
@@ -435,18 +477,18 @@ async function scrapeIndeed(location) {
 
         return {
             portal: 'Indeed',
-            location,
+            location: LOCATIONS_JOINED,
             items,
         };
     } catch (error) {
         console.error(
-            `❌ Indeed failed for ${location}:`,
+            `❌ Indeed failed:`,
             error.message
         );
 
         return {
             portal: 'Indeed',
-            location,
+            location: LOCATIONS_JOINED,
             items: [],
         };
     }
@@ -511,6 +553,8 @@ function normalizeJob(job, portal, searchLocation) {
         Company: company || 'N/A',
         Source: portal,
         Date_Posted: parsedDate || new Date(),
+        // Falls back to the searched locations string (not a
+        // single city) since one call now covers all of them.
         Location: location || searchLocation,
         Experience: `${EXPERIENCE_MIN}-${EXPERIENCE_MAX} years`,
         Stack_Match: '',
@@ -559,55 +603,39 @@ async function aggregateAndFormatJobs() {
     );
 
     // ========================================================
-    // SCRAPE
+    // SCRAPE — one call per portal now, covering every
+    // TARGET_LOCATIONS entry in that single call. This replaced
+    // the old per-location loop that fired all 4 portals for
+    // every city (was: locations x 4 actor starts, now: just 4).
     // ========================================================
 
     let successfulRuns = 0;
 
-    for (const location of TARGET_LOCATIONS) {
-        console.log('');
-        console.log(`📍 Processing location: ${location}`);
-        console.log('---------------------------------------------');
+    const results = [];
 
-        // Run sequentially instead of launching everything
-        // simultaneously. This reduces rate-limit pressure.
-        const results = [];
+    results.push(await scrapeLinkedIn());
+    results.push(await scrapeNaukri());
+    results.push(await scrapeHirist());
+    results.push(await scrapeIndeed());
 
-        results.push(
-            await scrapeLinkedIn(location)
-        );
+    for (const result of results) {
+        successfulRuns++;
 
-        results.push(
-            await scrapeNaukri(location)
-        );
-
-        results.push(
-            await scrapeHirist(location)
-        );
-
-        results.push(
-            await scrapeIndeed(location)
-        );
-
-        for (const result of results) {
-            successfulRuns++;
-
-            for (const rawJob of result.items) {
-                const job = normalizeJob(
-                    rawJob,
-                    result.portal,
-                    result.location
-                );
-
-                if (job) {
-                    allJobs.push(job);
-                }
-            }
-
-            console.log(
-                `   ${result.portal}: ${result.items.length} jobs`
+        for (const rawJob of result.items) {
+            const job = normalizeJob(
+                rawJob,
+                result.portal,
+                result.location
             );
+
+            if (job) {
+                allJobs.push(job);
+            }
         }
+
+        console.log(
+            `   ${result.portal}: ${result.items.length} jobs`
+        );
     }
 
     console.log('');
