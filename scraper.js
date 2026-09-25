@@ -52,7 +52,7 @@ const SEARCH_DAYS = 3;
 
 // Experience
 const EXPERIENCE_MIN = 2;
-const EXPERIENCE_MAX = 6;
+const EXPERIENCE_MAX = 4;
 
 // COST FIX #2: Lowered from 50. Your own filter logic only keeps
 // jobs scoring 30+, so pulling 50 per call to keep a handful was
@@ -332,51 +332,21 @@ async function getDatasetItems(run) {
 // ============================================================
 
 async function scrapeLinkedIn() {
-    console.log(`🔵 LinkedIn → ${LOCATIONS_JOINED}`);
-
-    try {
-        const run = await client
-            .actor(PORTALS.LinkedIn)
-            .call({
-                keywords: SEARCH_KEYWORDS,
-                // Try array form first — check Input schema.
-                // If it errors or silently ignores extra cities,
-                // switch to: location: LOCATIONS_JOINED,
-                location: TARGET_LOCATIONS,
+    const allItems = [];
+    for (const loc of TARGET_LOCATIONS) {          // loop per city — actor takes one string
+        try {
+            const run = await client.actor(PORTALS.LinkedIn).call({
+                keywords: 'React Node.js',           // shorter, more literal phrase — test what actually returns results
+                location: loc,                       // STRING, not array
                 datePosted: 'r259200',
                 limit: MAX_ITEMS,
             });
-
-        const items = await getDatasetItems(run);
-
-        return {
-            portal: 'LinkedIn',
-            location: LOCATIONS_JOINED,
-            items,
-        };
-    } catch (error) {
-        console.error(
-            `❌ LinkedIn failed:`,
-            error.message
-        );
-
-        return {
-            portal: 'LinkedIn',
-            location: LOCATIONS_JOINED,
-            items: [],
-        };
+            allItems.push(...(await getDatasetItems(run)));
+        } catch (error) {
+            console.error(`❌ LinkedIn (${loc}) failed:`, error.message);
+        }
     }
-
-    // --- Fallback if the actor truly only accepts one location ---
-    // for (const location of TARGET_LOCATIONS) {
-    //     const run = await client.actor(PORTALS.LinkedIn).call({
-    //         keywords: SEARCH_KEYWORDS,
-    //         location,
-    //         datePosted: 'r259200',
-    //         limit: MAX_ITEMS,
-    //     });
-    //     ...
-    // }
+    return { portal: 'LinkedIn', location: LOCATIONS_JOINED, items: allItems };
 }
 
 // ============================================================
@@ -384,37 +354,18 @@ async function scrapeLinkedIn() {
 // ============================================================
 
 async function scrapeNaukri() {
-    console.log(`🟢 Naukri → ${LOCATIONS_JOINED}`);
-
     try {
-        const run = await client
-            .actor(PORTALS.Naukri)
-            .call({
-                keyword: SEARCH_KEYWORDS,
-                location: LOCATIONS_JOINED,
-                experienceMin: EXPERIENCE_MIN,
-                experienceMax: EXPERIENCE_MAX,
-                postedWithinDays: SEARCH_DAYS,
-            });
-
-        const items = await getDatasetItems(run);
-
-        return {
-            portal: 'Naukri',
-            location: LOCATIONS_JOINED,
-            items,
-        };
+        const run = await client.actor(PORTALS.Naukri).call({
+            keyword: 'React Developer',              // one real title/skill, not a 7-term string
+            location: TARGET_LOCATIONS[0],            // one city at a time, loop if you want both
+            experience: `${EXPERIENCE_MIN}-${EXPERIENCE_MAX}`,  // correct field name + format
+            jobAge: '7',                              // one of: 1,3,7,15,30 — not "3"
+            maxResultsPerQuery: MAX_ITEMS,
+        });
+        return { portal: 'Naukri', location: LOCATIONS_JOINED, items: await getDatasetItems(run) };
     } catch (error) {
-        console.error(
-            `❌ Naukri failed:`,
-            error.message
-        );
-
-        return {
-            portal: 'Naukri',
-            location: LOCATIONS_JOINED,
-            items: [],
-        };
+        console.error(`❌ Naukri failed:`, error.message);
+        return { portal: 'Naukri', location: LOCATIONS_JOINED, items: [] };
     }
 }
 
